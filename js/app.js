@@ -1,119 +1,45 @@
 // =====================================================
 // =====================================================
-let playerCount = 1;        
-let gameStyle = null;       
+let playerCount = 1;
+let gameStyle = null;
 
+const TIMER_DURATION = 15;
 
-const TIMER_DURATION = 20;
+const questions = QUESTION_DB;
 
-const questions = [
-  {
-    id: 1,
-    question: 'What does "proactive" mean in a workplace context?',
-    options: [
-      'Waiting for instructions before acting',
-      'Taking initiative and acting in advance',
-      'Reacting quickly to problems',
-      'Following a set schedule',
-    ],
-    correctAnswer: 1,
-    category: 'Vocabulary',
-  },
-  {
-    id: 2,
-    question: 'Complete the sentence: "Could you please _____ me know when you are available?"',
-    options: ['let', 'make', 'tell', 'give'],
-    correctAnswer: 0,
-    category: 'Grammar',
-  },
-  {
-    id: 3,
-    question: 'Which phrase is most appropriate for asking for feedback from your manager?',
-    options: [
-      'Give me your thoughts.',
-      'Tell me what you think.',
-      'I would appreciate your feedback on this.',
-      'What do you think about it?',
-    ],
-    correctAnswer: 2,
-    category: 'Communication',
-  },
-  {
-    id: 4,
-    question: 'What is the meaning of "to collaborate"?',
-    options: [
-      'To work independently',
-      'To compete with others',
-      'To work together with others',
-      'To supervise a team',
-    ],
-    correctAnswer: 2,
-    category: 'Vocabulary',
-  },
-  {
-    id: 5,
-    question: 'Which sentence demonstrates active listening?',
-    options: [
-      'I understand what you mean, and I have a different perspective.',
-      'You are wrong about that.',
-      'Let me tell you what I think.',
-      "I wasn't paying attention, can you repeat?",
-    ],
-    correctAnswer: 0,
-    category: 'Communication',
-  },
-  {
-    id: 6,
-    question: 'Choose the correct form: "The team _____ working on the project since Monday."',
-    options: ['has been', 'have been', 'is been', 'are been'],
-    correctAnswer: 0,
-    category: 'Grammar',
-  },
-  {
-    id: 7,
-    question: 'What does "think outside the box" mean?',
-    options: [
-      'To organize things properly',
-      'To think creatively and differently',
-      'To focus on details',
-      'To work in a confined space',
-    ],
-    correctAnswer: 1,
-    category: 'Idioms',
-  },
-  {
-    id: 8,
-    question: 'Which is the most professional way to disagree in a meeting?',
-    options: [
-      "That's not right.",
-      "I don't think so.",
-      'I see your point, however, I have a different view.',
-      "You're mistaken.",
-    ],
-    correctAnswer: 2,
-    category: 'Communication',
-  },
-  {
-    id: 9,
-    question: 'What does "to meet a deadline" mean?',
-    options: [
-      'To schedule a meeting',
-      'To complete work by a specified time',
-      'To extend the timeframe',
-      'To cancel an appointment',
-    ],
-    correctAnswer: 1,
-    category: 'Vocabulary',
-  },
-  {
-    id: 10,
-    question: 'Complete: "I am looking forward _____ working with you."',
-    options: ['to', 'for', 'at', 'in'],
-    correctAnswer: 0,
-    category: 'Grammar',
-  },
-];
+// ===================== RANDOM HELPERS =====================
+function shuffleArray(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
+function pickNRandom(arr, n) {
+  return shuffleArray(arr).slice(0, n);
+}
+
+// ✅ shuffle options and fix correctAnswer index
+function shuffleQuestionOptions(q) {
+  const correctOptionText = q.options[q.correctAnswer];
+  const shuffledOptions = shuffleArray(q.options);
+  const newCorrectIndex = shuffledOptions.indexOf(correctOptionText);
+
+  return {
+    ...q,
+    options: shuffledOptions,
+    correctAnswer: newCorrectIndex,
+  };
+}
+
+// =====================================================
+// QUESTIONS FOR THIS MATCH
+let baseQuestions = [];        // ✅ fixed 10 questions (same for all players)
+let activeQuestions = [];      // ✅ per-player shuffled options set
+let totalQuestions = 0;
+let selectedQuestionIds = [];
 // =====================================================
 
 // =====================================================
@@ -143,39 +69,38 @@ const Screens = {
 };
 let currentScreen = Screens.WELCOME;
 
-// داده‌های جمع‌آوری‌شده
 let playerNames = [];
 
 // =====================================================
-
+// TOPICS (instead of game styles)
 // =====================================================
 const gameStyles = [
   {
-    id: 'quick-quiz',
-    name: 'Quick Quiz',
-    description: 'Fast-paced questions for quick learning',
-    icon: '⚡',
+    id: 'language-knowledge',
+    name: 'Language Knowledge',
+    description: 'Vocabulary, grammar, and English basics',
+    icon: '📚',
     color: 'from-yellow-400 to-orange-500',
   },
   {
-    id: 'challenge',
-    name: 'Challenge Mode',
-    description: 'Test your skills with difficult questions',
-    icon: '🏆',
+    id: 'general-knowledge',
+    name: 'General Knowledge',
+    description: 'Fun facts and world knowledge',
+    icon: '🌍',
     color: 'from-purple-400 to-pink-500',
   },
   {
-    id: 'practice',
-    name: 'Practice Mode',
-    description: 'Learn at your own pace without pressure',
-    icon: '🧠',
+    id: 'soft-skills',
+    name: 'Soft Skills',
+    description: 'Communication, teamwork, professionalism',
+    icon: '🤝',
     color: 'from-green-400 to-teal-500',
   },
   {
-    id: 'timed',
-    name: 'Timed Battle',
-    description: 'Race against the clock!',
-    icon: '⏱️',
+    id: 'memes-idioms',
+    name: 'riddles & Idioms',
+    description: 'Idioms, riddles and slangs',
+    icon: '😂',
     color: 'from-red-400 to-rose-500',
   },
 ];
@@ -190,11 +115,11 @@ function renderWelcomeScreen() {
       <!-- Header -->
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg text-white text-3xl">
-          📘
+          ❓
         </div>
-        <h1 class="text-slate-900 mb-2 text-3xl font-bold">Welcome to English Quest</h1>
+        <h1 class="text-slate-900 mb-2 text-3xl font-bold">Welcome to Quick-Quiz</h1>
         <p class="text-slate-600">
-          Master English through fun and interactive tests!
+          Master English through fun and interactive quick-quizes with your friends!
         </p>
       </div>
 
@@ -223,7 +148,7 @@ function renderWelcomeScreen() {
 
       <!-- Game Style Selection -->
       <div class="mb-8">
-        <h2 class="text-slate-900 mb-4 text-xl font-bold">Choose Your Game Style</h2>
+        <h2 class="text-slate-900 mb-4 text-xl font-bold">Choose Your Game Topic</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           ${gameStyles.map(style => `
@@ -282,10 +207,23 @@ function bindWelcomeEvents() {
 
   document.getElementById("start-game-btn").addEventListener("click", () => {
     if (!welcomeSelectedStyle || !playerCount || playerCount < 1) {
-      alert("Please enter the number of players and select a game style");
+      alert("Please enter the number of players and select a topic");
       return;
     }
+
     gameStyle = welcomeSelectedStyle;
+
+    const topicQuestions = questions.filter(q => q.topic === gameStyle);
+
+    if (topicQuestions.length < 10) {
+      alert("Not enough questions in this topic. Please add more!");
+      return;
+    }
+
+    // ✅ pick fixed 10 ONCE (same for all players)
+    baseQuestions = pickNRandom(topicQuestions, 10);
+    totalQuestions = baseQuestions.length;
+    selectedQuestionIds = baseQuestions.map(q => q.id);
 
     currentScreen = Screens.PLAYER_NAMES;
     playerNames = Array(playerCount).fill("");
@@ -329,10 +267,8 @@ function renderPlayerNamesScreen() {
     `;
   }).join("");
 
-  const prettyMode = gameStyle
-    .split('-')
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ');
+  const chosenTopic =
+    gameStyles.find(s => s.id === gameStyle)?.name || gameStyle;
 
   return `
     <div class="min-h-screen flex items-center justify-center p-4">
@@ -351,19 +287,27 @@ function renderPlayerNamesScreen() {
 
         <div class="p-4 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl">
           <div class="flex items-center justify-center gap-2 text-slate-700">
-            <span>Game Mode:</span>
+            <span>Game Topic:</span>
             <span class="px-3 py-1 bg-white rounded-lg shadow-sm">
-              ${prettyMode}
+              ${chosenTopic}
             </span>
           </div>
         </div>
 
         <div class="flex justify-center gap-4">
-          <button id="continue-btn"
+
+        <button id="previous-btn"
+            class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
+        <span class="text-lg">⬅️</span>
+            previous page
+          </button>
+
+           <button id="continue-btn"
             class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
             Continue to Game
-            <span class="text-lg">➡️</span>
+    <span class="text-lg">➡️</span>
           </button>
+
         </div>
 
       </div>
@@ -389,11 +333,14 @@ function bindPlayerNamesEvents() {
       alert("Please enter names for all players");
       return;
     }
-
     currentScreen = Screens.GAME;
-    initGameStates();
+    initGameStates();  // ✅ will shuffle options for player 1
     renderApp();
     startTimerIfNeeded();
+  });
+
+  document.getElementById("previous-btn").addEventListener("click", () => {
+    window.location.href = "index.html";
   });
 }
 
@@ -403,28 +350,33 @@ function bindPlayerNamesEvents() {
 let currentQuestionIndex = 0;
 let currentPlayerIndex = 0;
 let selectedAnswer = null;
-let timeLeft = TIMER_DURATION;  
+let timeLeft = TIMER_DURATION;
 let isAnswered = false;
 let scores = [];
 let gameFinished = false;
 let showPlayerTransition = false;
 let timerId = null;
 
+// ✅ build a fresh shuffled-options set for the current player
+function buildQuestionsForCurrentPlayer() {
+  return baseQuestions.map(shuffleQuestionOptions);
+}
+
 function initGameStates() {
   currentQuestionIndex = 0;
   currentPlayerIndex = 0;
   selectedAnswer = null;
-  timeLeft = TIMER_DURATION;     
+  timeLeft = TIMER_DURATION;
   isAnswered = false;
   scores = Array(playerNames.length).fill(0);
   gameFinished = false;
   showPlayerTransition = false;
+
+  // ✅ first player gets shuffled options now
+  activeQuestions = buildQuestionsForCurrentPlayer();
 }
 
-const totalQuestions = questions.length;
-
 function getTimerColor() {
-
   if (timeLeft > (TIMER_DURATION * 2) / 3) return 'from-green-500 to-green-600';
   if (timeLeft > TIMER_DURATION / 3) return 'from-yellow-500 to-yellow-600';
   return 'from-red-500 to-red-600';
@@ -445,7 +397,7 @@ function getAnswerClassName(index, correctAnswer) {
 
 function startTimerIfNeeded() {
   stopTimer();
-  if (gameStyle === "practice" || isAnswered || gameFinished || showPlayerTransition) return;
+  if (isAnswered || gameFinished || showPlayerTransition) return;
 
   timerId = setInterval(() => {
     timeLeft -= 1;
@@ -476,7 +428,7 @@ function handleAnswerSelect(answerIndex) {
   isAnswered = true;
   stopTimer();
 
-  const currentQuestion = questions[currentQuestionIndex];
+  const currentQuestion = activeQuestions[currentQuestionIndex];
   if (answerIndex === currentQuestion.correctAnswer) {
     scores[currentPlayerIndex] += 1;
   }
@@ -496,7 +448,7 @@ function moveToNextQuestion() {
     currentQuestionIndex += 1;
     selectedAnswer = null;
     isAnswered = false;
-    timeLeft = TIMER_DURATION;  
+    timeLeft = TIMER_DURATION;
   }
 
   renderApp();
@@ -509,13 +461,23 @@ function startNextPlayer() {
   showPlayerTransition = false;
   selectedAnswer = null;
   isAnswered = false;
-  timeLeft = TIMER_DURATION;    
+  timeLeft = TIMER_DURATION;
+
+  // ✅ SAME 10 questions, but reshuffle options for next player
+  activeQuestions = buildQuestionsForCurrentPlayer();
 
   renderApp();
   startTimerIfNeeded();
 }
 
 // ------------------
+function goFirstPage() {
+  window.location.href = "index.html";
+}
+
+// (renderGameOver, renderPlayerTransition, renderMainGame, bindGameEvents, renderApp)
+// ✅ unchanged EXCEPT they already use activeQuestions
+
 function renderGameOver() {
   const maxScore = Math.max(...scores);
   const winnerIndices = scores
@@ -568,6 +530,13 @@ function renderGameOver() {
               </div>
             </div>
           `).join("")}
+        </div>
+             <div class="flex justify-center gap-4 m-10">
+
+        <button id="f-page" onclick="goFirstPage()"
+            class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
+            Back to first page
+          </button>
         </div>
       </div>
     </div>
@@ -634,7 +603,7 @@ function renderPlayerTransition() {
 }
 
 function renderMainGame() {
-  const currentQuestion = questions[currentQuestionIndex];
+  const currentQuestion = activeQuestions[currentQuestionIndex];
   const currentPlayer = playerNames[currentPlayerIndex];
   const progressPercent = ((currentQuestionIndex + 1) / totalQuestions) * 100;
 
@@ -655,7 +624,6 @@ function renderMainGame() {
           </div>
         </div>
 
-        ${gameStyle !== "practice" ? `
         <div class="p-4 shadow-lg bg-white rounded-2xl">
           <div class="flex items-center gap-3">
             <div class="w-12 h-12 bg-gradient-to-br ${getTimerColor()} rounded-lg flex items-center justify-center text-white">
@@ -666,7 +634,7 @@ function renderMainGame() {
               <div class="text-slate-900 font-bold text-lg">${timeLeft}s</div>
             </div>
           </div>
-        </div>` : ""}
+        </div>
       </div>
 
       <div class="p-4 mb-6 shadow-lg rounded-2xl bg-gradient-to-r ${getPlayerColor(currentPlayerIndex)} bg-opacity-10">
@@ -689,7 +657,7 @@ function renderMainGame() {
                      ${!isAnswered ? "cursor-pointer hover:scale-[1.02]" : "cursor-not-allowed"}"
               data-index="${index}"
               ${isAnswered ? "disabled" : ""}>
-              
+
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-4">
                   <div class="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center text-slate-700 font-bold">
@@ -697,7 +665,7 @@ function renderMainGame() {
                   </div>
                   <span class="text-slate-900">${option}</span>
                 </div>
-                ${isAnswered && index === currentQuestion.correctAnswer ? 
+                ${isAnswered && index === currentQuestion.correctAnswer ?
                   `<span class="text-green-600 text-xl">✅</span>` : ""}
               </div>
             </button>
@@ -736,7 +704,6 @@ function bindGameEvents() {
 }
 
 // =====================================================
-
 // =====================================================
 function renderApp() {
   const root = document.getElementById("app-root");
@@ -753,7 +720,6 @@ function renderApp() {
     return;
   }
 
-  // GAME
   if (gameFinished) {
     root.innerHTML = renderGameOver();
     return;
@@ -769,5 +735,4 @@ function renderApp() {
   bindGameEvents();
 }
 
-////
 renderApp();
