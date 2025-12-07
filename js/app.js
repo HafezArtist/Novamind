@@ -1,13 +1,49 @@
-// =====================================================
-// =====================================================
 let playerCount = 1;
 let gameStyle = null;
 
 const TIMER_DURATION = 15;
+const questions = QUESTION_DB; 
 
-const questions = QUESTION_DB;
+// =====================
+//  Sound Effects (FINAL)
+// =====================
+const SFX = {
+  stressLoop: new Audio("sounds/stress.mp3"),  // آهنگ استرسی حین بازی
+  tadaWheel: new Audio("sounds/tada.mp3"),     // آهنگ لاکی‌ویل
+  hornWin: new Audio("sounds/horn.mp3"),       // شیپور آخر بازی
+};
 
-// ===================== RANDOM HELPERS =====================
+let soundEnabled = true;
+
+// تنظیمات اولیه
+SFX.stressLoop.loop = true;
+SFX.stressLoop.volume = 0.35;
+
+SFX.tadaWheel.loop = false;
+SFX.tadaWheel.volume = 0.8;
+
+SFX.hornWin.loop = false;
+SFX.hornWin.volume = 0.9;
+
+function playSfx(audio) {
+  if (!soundEnabled || !audio) return;
+  try {
+    audio.currentTime = 0;
+    audio.play();
+  } catch (e) {}
+}
+
+function stopSfx(audio) {
+  if (!audio) return;
+  try {
+    audio.pause();
+    audio.currentTime = 0;
+  } catch (e) {}
+}
+
+// =====================================================
+//  ابزارهای شافل و انتخاب سوال
+// =====================================================
 function shuffleArray(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -21,7 +57,6 @@ function pickNRandom(arr, n) {
   return shuffleArray(arr).slice(0, n);
 }
 
-// ✅ shuffle options and fix correctAnswer index
 function shuffleQuestionOptions(q) {
   const correctOptionText = q.options[q.correctAnswer];
   const shuffledOptions = shuffleArray(q.options);
@@ -35,12 +70,12 @@ function shuffleQuestionOptions(q) {
 }
 
 // =====================================================
-// QUESTIONS FOR THIS MATCH
-let baseQuestions = [];        // ✅ fixed 10 questions (same for all players)
-let activeQuestions = [];      // ✅ per-player shuffled options set
+//  سوالات فعال بازی
+// =====================================================
+let baseQuestions = [];        
+let activeQuestions = [];     
 let totalQuestions = 0;
 let selectedQuestionIds = [];
-// =====================================================
 
 // =====================================================
 function getPlayerColor(index) {
@@ -60,142 +95,260 @@ function getPlayerColor(index) {
 }
 
 // =====================================================
-
-// =====================================================
 const Screens = {
   WELCOME: "WELCOME",
   PLAYER_NAMES: "PLAYER_NAMES",
   GAME: "GAME",
 };
 let currentScreen = Screens.WELCOME;
-
 let playerNames = [];
 
-// =====================================================
-// TOPICS (instead of game styles)
-// =====================================================
+//  ---- WelcomeScreen + LuckyWheel ----
 const gameStyles = [
   {
-    id: 'language-knowledge',
-    name: 'Language Knowledge',
-    description: 'Vocabulary, grammar, and English basics',
-    icon: '📚',
+    id: 'music',
+    name: 'Music',
+    description: 'From songs to artists🎧',
+    icon: '🎵',
+    color: 'from-pink-400 to-rose-500',
+  },
+  {
+    id: 'movies-series',
+    name: 'Movies & Series & Anime',
+    description: "who's the best watcher?🍿",
+    icon: '🎬',
+    color: 'from-indigo-400 to-purple-600',
+  },
+  {
+    id: 'memes-riddles',
+    name: 'Memes & Riddles',
+    description: 'only a Gen Z gets it🧩',
+    icon: '😂',
     color: 'from-yellow-400 to-orange-500',
   },
   {
-    id: 'general-knowledge',
-    name: 'General Knowledge',
-    description: 'Fun facts and world knowledge',
-    icon: '🌍',
-    color: 'from-purple-400 to-pink-500',
-  },
-  {
-    id: 'soft-skills',
-    name: 'Soft Skills',
-    description: 'Communication, teamwork, professionalism',
-    icon: '🤝',
-    color: 'from-green-400 to-teal-500',
-  },
-  {
-    id: 'memes-idioms',
-    name: 'riddles & Idioms',
-    description: 'Idioms, riddles and slangs',
-    icon: '😂',
-    color: 'from-red-400 to-rose-500',
+    id: 'language-general',
+    name: 'Language General Knowledge',
+    description: 'English facts, vocab, and grammer 📚',
+    icon: '🗣️',
+    color: 'from-green-400 to-emerald-600',
   },
 ];
 
 let welcomeSelectedStyle = null;
+let showWheel = false;
 
+// ---- Lucky Wheel State ----
+let wheelSpinning = false;
+let wheelRotation = 0;
+let wheelSelectedStyle = null;
+
+const wheelColors = {
+  "music": "#ec4899",
+  "movies-series": "#8b5cf6",
+  "memes-riddles": "#f59e0b",
+  "language-general": "#10b981",
+};
+
+// ---- Lucky Wheel UI ----
+function renderLuckyWheel() {
+  const segAngle = 360 / gameStyles.length;
+
+  const gradientStops = gameStyles.map((s, i) => {
+    const start = i * segAngle;
+    const end = (i + 1) * segAngle;
+    return `${wheelColors[s.id]} ${start}deg ${end}deg`;
+  }).join(", ");
+
+  const labelsInsideWheel = gameStyles.map((s, i) => {
+    const mid = i * segAngle + segAngle / 2;
+
+    return `
+      <div class="absolute inset-0 flex items-start justify-center pt-8 pointer-events-none"
+        style="transform: rotate(${mid}deg);">
+        <span class="text-white px-2 py-1 rounded text-sm font-semibold text-center"
+          style="transform: rotate(90deg); transform-origin: center; text-shadow: 0 2px 6px rgba(0,0,0,0.35);">
+          ${s.name}
+        </span>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="flex flex-col items-center gap-6 p-8 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl shadow-xl">
+      <div class="text-center">
+        <h3 class="text-slate-900 mb-2 text-xl font-bold">✨ Lucky Wheel ✨</h3>
+        <p class="text-slate-600">Spin to let fate pick your topic 😎</p>
+      </div>
+
+      <div class="relative">
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-4 z-10">
+          <div class="w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[25px] border-t-red-500 drop-shadow-lg"></div>
+        </div>
+
+        <div class="relative w-72 h-72 md:w-80 md:h-80 rounded-full shadow-2xl overflow-hidden border-8 border-white">
+          <div id="wheel" class="absolute inset-0 rounded-full"
+            style="background: conic-gradient(${gradientStops}); transform: rotate(${wheelRotation}deg); will-change: transform; backface-visibility: hidden;">
+            ${labelsInsideWheel}
+            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-white rounded-full shadow-lg border-4 border-slate-200 flex items-center justify-center z-20">
+              ✨
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button id="spin-btn" ${wheelSpinning ? "disabled" : ""}
+        class="px-8 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 shadow-lg disabled:opacity-50">
+        ${wheelSpinning ? "Spinning..." : "Spin the Wheel!"}
+      </button>
+
+      ${wheelSelectedStyle && !wheelSpinning ? `
+        <div class="text-center p-4 bg-white rounded-lg shadow-md border-2 border-green-400 animate-bounce">
+          <p class="text-green-600 font-semibold">
+            Selected: ${gameStyles.find(x => x.id === wheelSelectedStyle)?.name}
+          </p>
+        </div>` : ""}
+    </div>
+  `;
+}
+
+// ---- Lucky Wheel Logic (Smooth) ----
+function spinWheel() {
+  if (wheelSpinning) return;
+
+  wheelSpinning = true;
+  wheelSelectedStyle = null;
+
+  // ✅ Play tada while spinning
+  playSfx(SFX.tadaWheel);
+
+  const spinBtn = document.getElementById("spin-btn");
+  if (spinBtn) spinBtn.disabled = true;
+
+  const segAngle = 360 / gameStyles.length;
+  const randomSpins = 5 + Math.random() * 3;
+  const randomSegment = Math.floor(Math.random() * gameStyles.length);
+
+  const finalRotation =
+    wheelRotation +
+    (randomSpins * 360) +
+    (randomSegment * segAngle) +
+    (segAngle / 2);
+
+  const wheelEl = document.getElementById("wheel");
+  if (wheelEl) {
+    wheelEl.style.transition = "none";
+    wheelEl.style.transform = `rotate(${wheelRotation}deg)`;
+    wheelEl.offsetHeight;
+
+    requestAnimationFrame(() => {
+      wheelEl.style.transition = "transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)";
+      wheelEl.style.transform = `rotate(${finalRotation}deg)`;
+    });
+  }
+
+  setTimeout(() => {
+    wheelSpinning = false;
+    wheelRotation = finalRotation;
+
+    // ✅ stop tada when spin ends
+    stopSfx(SFX.tadaWheel);
+
+    const normalizedRotation = finalRotation % 360;
+    const selectedIndex =
+      Math.floor((360 - normalizedRotation + (segAngle / 2)) / segAngle) % gameStyles.length;
+
+    const selected = gameStyles[selectedIndex];
+
+    wheelSelectedStyle = selected.id;
+    welcomeSelectedStyle = selected.id;
+
+    renderApp();
+
+    setTimeout(() => {
+      showWheel = false;
+      renderApp();
+    }, 1500);
+  }, 4000);
+}
+
+// ---- Welcome UI ----
 function renderWelcomeScreen() {
+  const manualGrid = `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      ${gameStyles.map(style => `
+        <div class="game-style-card p-6 cursor-pointer transition-all duration-200 hover:scale-105 bg-white rounded-2xl
+          ${welcomeSelectedStyle === style.id ? "ring-4 ring-blue-500 shadow-xl" : "hover:shadow-lg"}"
+          data-style="${style.id}">
+          <div class="flex items-start gap-4">
+            <div class="flex items-center justify-center w-16 h-16 bg-gradient-to-br ${style.color} rounded-xl text-white shadow-md text-3xl">
+              ${style.icon}
+            </div>
+            <div class="flex-1">
+              <h3 class="text-slate-900 mb-1 text-lg font-bold">${style.name}</h3>
+              <p class="text-slate-600">${style.description}</p>
+            </div>
+            ${welcomeSelectedStyle === style.id ? `
+              <div class="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-full text-white text-sm">✓</div>` : ""}
+          </div>
+        </div>`).join("")}
+    </div>
+  `;
+
   return `
   <div class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-4xl">
-
-      <!-- Header -->
       <div class="text-center mb-8">
-        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg text-white text-3xl">
-          ❓
-        </div>
-        <h1 class="text-slate-900 mb-2 text-3xl font-bold">Welcome to Quick-Quiz</h1>
-        <p class="text-slate-600">
-          Master English through fun and interactive quick-quizes with your friends!
-        </p>
+        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl mb-4 shadow-lg text-white text-3xl">⚡</div>
+        <h1 class="text-slate-900 mb-2 text-3xl font-bold">Zlingo</h1>
+        <p class="text-slate-600">Zlingo, Your Gen Z English quiz.</p>
       </div>
 
-      <!-- Player Count -->
       <div class="p-6 mb-6 shadow-lg border-2 bg-white rounded-2xl">
         <div class="flex items-center gap-4">
-          <div class="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg text-blue-600 text-2xl">
-            👥
-          </div>
+          <div class="flex items-center justify-center w-12 h-12 bg-blue-100 rounded-lg text-blue-600 text-2xl">👥</div>
           <div class="flex-1">
-            <label for="player-count" class="block text-slate-700 mb-2">
-              Number of Players
-            </label>
-            <input
-              id="player-count"
-              type="number"
-              min="1"
-              max="10"
-              value="${playerCount}"
+            <label for="player-count" class="block text-slate-700 mb-2">Number of Players</label>
+            <input id="player-count" type="number" min="1" max="10" value="${playerCount}"
               class="max-w-xs w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-blue-400"
-              placeholder="Enter number of players"
-            />
+              placeholder="Enter number of players" />
           </div>
         </div>
       </div>
 
-      <!-- Game Style Selection -->
       <div class="mb-8">
-        <h2 class="text-slate-900 mb-4 text-xl font-bold">Choose Your Game Topic</h2>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          ${gameStyles.map(style => `
-            <div
-              class="game-style-card p-6 cursor-pointer transition-all duration-200 hover:scale-105 bg-white rounded-2xl
-                ${welcomeSelectedStyle === style.id ? "ring-4 ring-blue-500 shadow-xl" : "hover:shadow-lg"}"
-              data-style="${style.id}"
-            >
-              <div class="flex items-start gap-4">
-                <div class="flex items-center justify-center w-16 h-16 bg-gradient-to-br ${style.color} rounded-xl text-white shadow-md text-3xl">
-                  ${style.icon}
-                </div>
-
-                <div class="flex-1">
-                  <h3 class="text-slate-900 mb-1 text-lg font-bold">${style.name}</h3>
-                  <p class="text-slate-600">${style.description}</p>
-                </div>
-
-                ${welcomeSelectedStyle === style.id ? `
-                  <div class="flex items-center justify-center w-6 h-6 bg-blue-500 rounded-full text-white text-sm">
-                    ✓
-                  </div>
-                ` : ""}
-              </div>
-            </div>
-          `).join("")}
+        <div class="flex items-center justify-between mb-4 gap-3">
+          <h2 class="text-slate-900 text-xl font-bold">Pick a Topic</h2>
+          <button id="wheel-toggle-btn"
+            class="px-4 py-2 rounded-lg border bg-white shadow-sm hover:bg-slate-50 text-slate-700 font-semibold">
+            ${showWheel ? "Manual Selection" : "Try Lucky Wheel"}
+          </button>
         </div>
+        ${showWheel ? renderLuckyWheel() : manualGrid}
       </div>
 
-      <!-- Start Button -->
       <div class="flex justify-center">
         <button id="start-game-btn"
           class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg">
           Start Game
         </button>
       </div>
-
     </div>
   </div>
   `;
 }
 
+// ---- Welcome Events ----
 function bindWelcomeEvents() {
   const countInput = document.getElementById("player-count");
   countInput.addEventListener("input", (e) => {
     playerCount = Math.max(1, Math.min(10, Number(e.target.value || 1)));
     e.target.value = playerCount;
+  });
+
+  document.getElementById("wheel-toggle-btn").addEventListener("click", () => {
+    showWheel = !showWheel;
+    renderApp();
   });
 
   document.querySelectorAll(".game-style-card").forEach(card => {
@@ -204,6 +357,9 @@ function bindWelcomeEvents() {
       renderApp();
     });
   });
+
+  const spinBtn = document.getElementById("spin-btn");
+  if (spinBtn) spinBtn.addEventListener("click", spinWheel);
 
   document.getElementById("start-game-btn").addEventListener("click", () => {
     if (!welcomeSelectedStyle || !playerCount || playerCount < 1) {
@@ -214,13 +370,11 @@ function bindWelcomeEvents() {
     gameStyle = welcomeSelectedStyle;
 
     const topicQuestions = questions.filter(q => q.topic === gameStyle);
-
     if (topicQuestions.length < 10) {
       alert("Not enough questions in this topic. Please add more!");
       return;
     }
 
-    // ✅ pick fixed 10 ONCE (same for all players)
     baseQuestions = pickNRandom(topicQuestions, 10);
     totalQuestions = baseQuestions.length;
     selectedQuestionIds = baseQuestions.map(q => q.id);
@@ -232,87 +386,60 @@ function bindWelcomeEvents() {
 }
 
 // =====================================================
-
+//  ---- PlayerNamesScreen ----
 // =====================================================
 function renderPlayerNamesScreen() {
   const inputs = Array.from({ length: playerCount }).map((_, i) => {
     return `
       <div class="p-6 shadow-lg border-2 hover:shadow-xl transition-shadow bg-white rounded-2xl">
         <div class="flex items-center gap-4">
-          <div class="flex items-center justify-center w-16 h-16 bg-gradient-to-br ${getPlayerColor(i)} rounded-xl text-white shadow-md flex-shrink-0 text-2xl">
-            👤
-          </div>
-
+          <div class="flex items-center justify-center w-16 h-16 bg-gradient-to-br ${getPlayerColor(i)} rounded-xl text-white shadow-md flex-shrink-0 text-2xl">👤</div>
           <div class="flex-1">
-            <label for="player-${i}" class="block text-slate-700 mb-2">
-              Player ${i + 1}
-            </label>
-            <input
-              id="player-${i}"
-              type="text"
-              placeholder="Enter name for Player ${i + 1}"
+            <label for="player-${i}" class="block text-slate-700 mb-2">Player ${i + 1}</label>
+            <input id="player-${i}" type="text" placeholder="Enter name for Player ${i + 1}"
               class="w-full px-4 py-3 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-blue-400"
-              value="${playerNames[i] ?? ""}"
-            />
+              value="${playerNames[i] ?? ""}" />
           </div>
-
           <div id="check-${i}" class="${(playerNames[i]||"").trim() ? "" : "hidden"} flex items-center justify-center w-8 h-8 bg-green-500 rounded-full flex-shrink-0">
             <svg class="w-5 h-5 text-white" fill="none" stroke-linecap="round" stroke-linejoin="round"
-              stroke-width="2" viewBox="0 0 24 24" stroke="currentColor">
-              <path d="M5 13l4 4L19 7"></path>
-            </svg>
+              stroke-width="2" viewBox="0 0 24 24" stroke="currentColor"><path d="M5 13l4 4L19 7"></path></svg>
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join("");
 
-  const chosenTopic =
-    gameStyles.find(s => s.id === gameStyle)?.name || gameStyle;
+  const chosenTopic = gameStyles.find(s => s.id === gameStyle)?.name || gameStyle;
 
   return `
     <div class="min-h-screen flex items-center justify-center p-4">
       <div class="w-full max-w-3xl">
-
         <div class="text-center mb-8">
           <h1 class="text-slate-900 mb-2 text-3xl font-bold">Enter Player Names</h1>
-          <p class="text-slate-600">
-            Let's get to know everyone before we start the game
-          </p>
+          <p class="text-slate-600">Let's get to know everyone before we start the game</p>
         </div>
 
-        <div class="space-y-4 mb-8">
-          ${inputs}
-        </div>
+        <div class="space-y-4 mb-8">${inputs}</div>
 
         <div class="p-4 mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl">
           <div class="flex items-center justify-center gap-2 text-slate-700">
             <span>Game Topic:</span>
-            <span class="px-3 py-1 bg-white rounded-lg shadow-sm">
-              ${chosenTopic}
-            </span>
+            <span class="px-3 py-1 bg-white rounded-lg shadow-sm">${chosenTopic}</span>
           </div>
         </div>
 
         <div class="flex justify-center gap-4">
-
-        <button id="previous-btn"
+          <button id="previous-btn"
             class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
-        <span class="text-lg">⬅️</span>
-            previous page
+            <span class="text-lg">⬅️</span> previous page
           </button>
 
-           <button id="continue-btn"
+          <button id="continue-btn"
             class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
-            Continue to Game
-    <span class="text-lg">➡️</span>
+            Continue to Game <span class="text-lg">➡️</span>
           </button>
-
         </div>
-
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 function bindPlayerNamesEvents() {
@@ -333,8 +460,12 @@ function bindPlayerNamesEvents() {
       alert("Please enter names for all players");
       return;
     }
+
+    // ✅ آهنگ استرس از همینجا شروع میشه و تا آخر بازی ادامه داره
+    playSfx(SFX.stressLoop);
+
     currentScreen = Screens.GAME;
-    initGameStates();  // ✅ will shuffle options for player 1
+    initGameStates();
     renderApp();
     startTimerIfNeeded();
   });
@@ -345,7 +476,7 @@ function bindPlayerNamesEvents() {
 }
 
 // =====================================================
-
+//  ---- GameScreen ----
 // =====================================================
 let currentQuestionIndex = 0;
 let currentPlayerIndex = 0;
@@ -357,7 +488,6 @@ let gameFinished = false;
 let showPlayerTransition = false;
 let timerId = null;
 
-// ✅ build a fresh shuffled-options set for the current player
 function buildQuestionsForCurrentPlayer() {
   return baseQuestions.map(shuffleQuestionOptions);
 }
@@ -372,7 +502,6 @@ function initGameStates() {
   gameFinished = false;
   showPlayerTransition = false;
 
-  // ✅ first player gets shuffled options now
   activeQuestions = buildQuestionsForCurrentPlayer();
 }
 
@@ -421,6 +550,13 @@ function handleTimeUp() {
   setTimeout(moveToNextQuestion, 2000);
 }
 
+function getSpeedPoints(timeLeft) {
+  const used = TIMER_DURATION - timeLeft;
+  if (used < 5) return 3;   
+  if (used <= 10) return 2; 
+  return 1;                
+}
+
 function handleAnswerSelect(answerIndex) {
   if (isAnswered) return;
 
@@ -429,8 +565,10 @@ function handleAnswerSelect(answerIndex) {
   stopTimer();
 
   const currentQuestion = activeQuestions[currentQuestionIndex];
+
   if (answerIndex === currentQuestion.correctAnswer) {
-    scores[currentPlayerIndex] += 1;
+    const pts = getSpeedPoints(timeLeft);
+    scores[currentPlayerIndex] += pts;
   }
 
   renderApp();
@@ -463,23 +601,72 @@ function startNextPlayer() {
   isAnswered = false;
   timeLeft = TIMER_DURATION;
 
-  // ✅ SAME 10 questions, but reshuffle options for next player
   activeQuestions = buildQuestionsForCurrentPlayer();
 
   renderApp();
   startTimerIfNeeded();
 }
 
-// ------------------
 function goFirstPage() {
   window.location.href = "index.html";
 }
 
-// (renderGameOver, renderPlayerTransition, renderMainGame, bindGameEvents, renderApp)
-// ✅ unchanged EXCEPT they already use activeQuestions
+// =====================================================
+function getGenZMessage(score, isWinner, isStrictWinner) {
+  if (gameStyle === "language-general") return "";
 
+  if (isWinner) {
+    if (isStrictWinner && score < 15) {
+      return "Among all your rivals, you're the most Gen Z 😌🔥";
+    }
+    if (score >= 15 && score <= 21) return "You low-key passed! 😏✅";
+  }
+
+  if (score < 15) return "You're probably the parent of a Gen Z! 👵😂";
+  if (score > 24) return "Certified Gen Z 😎✅";
+  return "";
+}
+
+let confettiStarted = false;
+
+function startConfetti() {
+  if (confettiStarted) return;
+  confettiStarted = true;
+
+  const layer = document.createElement("div");
+  layer.className = "confetti-layer";
+  document.body.appendChild(layer);
+
+  const emojis = ["🎉", "✨", "🎊", "💥", "🪩", "🔥"];
+  const pieces = 80;
+
+  for (let i = 0; i < pieces; i++) {
+    const p = document.createElement("span");
+    p.className = "confetti-piece";
+    p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+
+    const left = Math.random() * 100;
+    const delay = Math.random() * 1.5;
+    const duration = 2.5 + Math.random() * 1.5;
+    const size = 14 + Math.random() * 16;
+    const rotate = Math.random() * 360;
+
+    p.style.left = left + "vw";
+    p.style.animationDelay = delay + "s";
+    p.style.animationDuration = duration + "s";
+    p.style.fontSize = size + "px";
+    p.style.transform = `rotate(${rotate}deg)`;
+
+    layer.appendChild(p);
+  }
+
+  setTimeout(() => layer.remove(), 5000);
+}
+
+// ---- Game Over UI ----
 function renderGameOver() {
   const maxScore = Math.max(...scores);
+
   const winnerIndices = scores
     .map((s, i) => (s === maxScore ? i : -1))
     .filter(i => i !== -1);
@@ -489,19 +676,32 @@ function renderGameOver() {
       ? `🏆 ${playerNames[winnerIndices[0]]} 🏆`
       : `🏆 ${winnerIndices.map(i => playerNames[i]).join(" & ")} 🏆`;
 
+  const sortedPlayers = playerNames
+    .map((name, index) => ({ name, index, score: scores[index] }))
+    .sort((a, b) => b.score - a.score);
+
+  const isTie = winnerIndices.length > 1;
+
   return `
-  <div class="min-h-screen flex items-center justify-center p-4">
+  <div class="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+    <style>
+      .confetti-layer { position: fixed; inset: 0; pointer-events: none; z-index: 9999; overflow: hidden; }
+      .confetti-piece { position: absolute; top: -5vh; animation: confetti-fall linear forwards; opacity: 0.95; will-change: transform, top; }
+      @keyframes confetti-fall {
+        0% { top: -5vh; transform: translateY(0) rotate(0deg); }
+        100% { top: 105vh; transform: translateY(105vh) rotate(720deg); }
+      }
+    </style>
+
     <div class="w-full max-w-2xl">
       <div class="p-8 text-center shadow-xl bg-white rounded-2xl">
-        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mb-6 text-white text-3xl">
-          🏆
-        </div>
+        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-full mb-6 text-white text-3xl">🏆</div>
 
         <h1 class="text-slate-900 mb-2 text-3xl font-bold">Game Over!</h1>
 
         <div class="mb-8">
           <p class="text-slate-600 mb-4">
-            ${winnerIndices.length === 1 ? "Congratulations to the winner!" : "It's a tie!"}
+            ${isTie ? "It's a tie! Winners have the same score 😮" : "Congratulations to the winner!"}
           </p>
           <div class="inline-block px-6 py-3 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-xl text-white shadow-lg">
             <span class="text-2xl">${winnersText}</span>
@@ -510,39 +710,47 @@ function renderGameOver() {
 
         <p class="text-slate-600 mb-8">Final Scores:</p>
 
-        <div class="space-y-4">
-          ${playerNames.map((name, index) => `
-            <div class="p-4 rounded-xl ${
-              winnerIndices.includes(index)
-                ? "bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-400"
-                : "bg-gradient-to-r from-slate-50 to-slate-100"
-            }">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(index)} rounded-lg flex items-center justify-center text-white">
-                    ${winnerIndices.includes(index) ? "🏆" : "👤"}
-                  </div>
-                  <span class="text-slate-900 font-semibold">${name}</span>
-                </div>
-                <div class="text-slate-900 font-bold">
-                  ${scores[index]} / ${totalQuestions}
-                </div>
-              </div>
-            </div>
-          `).join("")}
-        </div>
-             <div class="flex justify-center gap-4 m-10">
+        <div class="space-y-4 text-left">
+          ${sortedPlayers.map((p) => {
+            const isWinner = winnerIndices.includes(p.index);
+            const isStrictWinner = (winnerIndices.length === 1) && isWinner;
+            const msg = getGenZMessage(p.score, isWinner, isStrictWinner);
 
-        <button id="f-page" onclick="goFirstPage()"
-            class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg flex items-center gap-2">
+            return `
+              <div class="p-4 rounded-xl ${
+                isWinner
+                  ? "bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-400"
+                  : "bg-gradient-to-r from-slate-50 to-slate-100"
+              }">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(p.index)} rounded-lg flex items-center justify-center text-white">
+                      ${isWinner ? "🏆" : "👤"}
+                    </div>
+                    <div>
+                      <div class="text-slate-900 font-semibold">${p.name}</div>
+                      ${msg ? `<div class="text-slate-600 text-sm mt-1">${msg}</div>` : ""}
+                    </div>
+                  </div>
+                  <div class="text-slate-900 font-bold">${p.score}</div>
+                </div>
+              </div>`;
+          }).join("")}
+        </div>
+
+        <div class="flex justify-center gap-4 m-10">
+          <button onclick="goFirstPage()"
+            class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg">
             Back to first page
           </button>
         </div>
+
       </div>
     </div>
   </div>`;
 }
 
+// ---- Player Transition UI ----
 function renderPlayerTransition() {
   const currentPlayer = playerNames[currentPlayerIndex];
 
@@ -550,16 +758,9 @@ function renderPlayerTransition() {
   <div class="min-h-screen flex items-center justify-center p-4">
     <div class="w-full max-w-2xl">
       <div class="p-8 text-center shadow-xl bg-white rounded-2xl">
-
-        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex)} rounded-full mb-6 text-white text-3xl">
-          ✅
-        </div>
-
+        <div class="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex)} rounded-full mb-6 text-white text-3xl">✅</div>
         <h1 class="text-slate-900 mb-4 text-2xl font-bold">${currentPlayer} Finished!</h1>
-
-        <p class="text-slate-600 mb-6">
-          Score: ${scores[currentPlayerIndex]} / ${totalQuestions}
-        </p>
+        <p class="text-slate-600 mb-6">Score: ${scores[currentPlayerIndex]}</p>
 
         <div class="mb-8">
           <h2 class="text-slate-700 mb-4 font-semibold">Current Scores:</h2>
@@ -568,26 +769,19 @@ function renderPlayerTransition() {
               <div class="p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(index)} rounded-lg flex items-center justify-center text-white">
-                      👤
-                    </div>
+                    <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(index)} rounded-lg flex items-center justify-center text-white">👤</div>
                     <span class="text-slate-900 font-semibold">${name}</span>
                   </div>
-                  <div class="text-slate-900 font-bold">
-                    ${scores[index]} / ${totalQuestions}
-                  </div>
+                  <div class="text-slate-900 font-bold">${scores[index]}</div>
                 </div>
-              </div>
-            `).join("")}
+              </div>`).join("")}
           </div>
         </div>
 
         <div class="text-center mb-6">
           <p class="text-slate-700">Next Player:</p>
           <div class="inline-flex items-center gap-3 mt-2 px-6 py-3 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
-            <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex + 1)} rounded-lg flex items-center justify-center text-white">
-              👤
-            </div>
+            <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex + 1)} rounded-lg flex items-center justify-center text-white">👤</div>
             <span class="text-slate-900 font-semibold">${playerNames[currentPlayerIndex + 1]}</span>
           </div>
         </div>
@@ -596,12 +790,12 @@ function renderPlayerTransition() {
           class="px-12 py-3 rounded-xl text-white font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg">
           Start ${playerNames[currentPlayerIndex + 1]}'s Turn
         </button>
-
       </div>
     </div>
   </div>`;
 }
 
+// ---- Main Game UI ----
 function renderMainGame() {
   const currentQuestion = activeQuestions[currentQuestionIndex];
   const currentPlayer = playerNames[currentPlayerIndex];
@@ -614,9 +808,7 @@ function renderMainGame() {
       <div class="mb-6 flex items-center justify-between gap-4">
         <div class="flex-1 p-4 shadow-lg bg-white rounded-2xl">
           <div class="flex items-center justify-between mb-2">
-            <span class="text-slate-700">
-              Question ${currentQuestionIndex + 1} of ${totalQuestions}
-            </span>
+            <span class="text-slate-700">Question ${currentQuestionIndex + 1} of ${totalQuestions}</span>
             <span class="text-slate-500">${currentQuestion.category}</span>
           </div>
           <div class="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
@@ -626,22 +818,23 @@ function renderMainGame() {
 
         <div class="p-4 shadow-lg bg-white rounded-2xl">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 bg-gradient-to-br ${getTimerColor()} rounded-lg flex items-center justify-center text-white">
-              ⏱️
-            </div>
+            <div class="w-12 h-12 bg-gradient-to-br ${getTimerColor()} rounded-lg flex items-center justify-center text-white">⏱️</div>
             <div>
               <div class="text-slate-500 text-sm">Time Left</div>
               <div class="text-slate-900 font-bold text-lg">${timeLeft}s</div>
             </div>
           </div>
+
+          <button id="mute-btn"
+            class="mt-3 w-full px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border text-slate-700 font-semibold">
+            ${soundEnabled ? "🔊 Sound On" : "🔇 Sound Off"}
+          </button>
         </div>
       </div>
 
       <div class="p-4 mb-6 shadow-lg rounded-2xl bg-gradient-to-r ${getPlayerColor(currentPlayerIndex)} bg-opacity-10">
         <div class="flex items-center gap-3">
-          <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex)} rounded-lg flex items-center justify-center text-white">
-            👤
-          </div>
+          <div class="w-10 h-10 bg-gradient-to-br ${getPlayerColor(currentPlayerIndex)} rounded-lg flex items-center justify-center text-white">👤</div>
           <span class="text-slate-900 font-semibold">Current Player: ${currentPlayer}</span>
         </div>
       </div>
@@ -651,13 +844,10 @@ function renderMainGame() {
 
         <div class="grid gap-4">
           ${currentQuestion.options.map((option, index) => `
-            <button
-              class="answer-btn p-5 rounded-xl text-left transition-all duration-200
-                     ${getAnswerClassName(index, currentQuestion.correctAnswer)}
-                     ${!isAnswered ? "cursor-pointer hover:scale-[1.02]" : "cursor-not-allowed"}"
-              data-index="${index}"
-              ${isAnswered ? "disabled" : ""}>
-
+            <button class="answer-btn p-5 rounded-xl text-left transition-all duration-200
+              ${getAnswerClassName(index, currentQuestion.correctAnswer)}
+              ${!isAnswered ? "cursor-pointer hover:scale-[1.02]" : "cursor-not-allowed"}"
+              data-index="${index}" ${isAnswered ? "disabled" : ""}>
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-4">
                   <div class="w-8 h-8 bg-slate-200 rounded-lg flex items-center justify-center text-slate-700 font-bold">
@@ -665,11 +855,9 @@ function renderMainGame() {
                   </div>
                   <span class="text-slate-900">${option}</span>
                 </div>
-                ${isAnswered && index === currentQuestion.correctAnswer ?
-                  `<span class="text-green-600 text-xl">✅</span>` : ""}
+                ${isAnswered && index === currentQuestion.correctAnswer ? `<span class="text-green-600 text-xl">✅</span>` : ""}
               </div>
-            </button>
-          `).join("")}
+            </button>`).join("")}
         </div>
       </div>
 
@@ -677,9 +865,8 @@ function renderMainGame() {
         ${playerNames.map((name, index) => `
           <div class="p-4 text-center bg-white rounded-2xl shadow">
             <div class="text-slate-600 mb-1">${name}</div>
-            <div class="text-slate-900 font-bold">Score: ${scores[index]}</div>
-          </div>
-        `).join("")}
+            <div class="text-slate-900 font-bold">${scores[index]}</div>
+          </div>`).join("")}
       </div>
 
     </div>
@@ -701,9 +888,30 @@ function bindGameEvents() {
       handleAnswerSelect(idx);
     });
   });
+
+  const muteBtn = document.getElementById("mute-btn");
+  if (muteBtn) {
+    muteBtn.addEventListener("click", () => {
+      soundEnabled = !soundEnabled;
+
+      if (!soundEnabled) {
+        stopSfx(SFX.stressLoop);
+        stopSfx(SFX.tadaWheel);
+        stopSfx(SFX.hornWin);
+      } else {
+        // ✅ هرجا داخل GAME باشیم و بازی تموم نشده باشه → استرس‌لوپ ادامه پیدا کنه
+        if (currentScreen === Screens.GAME && !gameFinished) {
+          playSfx(SFX.stressLoop);
+        }
+      }
+
+      renderApp();
+    });
+  }
 }
 
 // =====================================================
+//  رندر کل اپ
 // =====================================================
 function renderApp() {
   const root = document.getElementById("app-root");
@@ -722,6 +930,13 @@ function renderApp() {
 
   if (gameFinished) {
     root.innerHTML = renderGameOver();
+    startConfetti();
+
+    stopSfx(SFX.stressLoop);
+
+    // ✅ horn on winners
+    playSfx(SFX.hornWin);
+
     return;
   }
 
